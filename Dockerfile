@@ -4,5 +4,6 @@ FROM --platform=linux/386 ubuntu:14.04
 COPY ./config/.bashrc /root/.bashrc
 COPY ./config/.vimrc /root/.vimrc
 
-RUN source ~/.bashrc
+ENV PATH="/root/pintos/src/utils:${PATH}"
+
 WORKDIR /root/pintos
