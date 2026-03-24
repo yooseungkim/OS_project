@@ -22,8 +22,6 @@ docker run -it --privileged --name pintos \
   -v $(pwd/bochs-2.6.2:/root/bochs-2.6.2 \
   -w /root/pintos \
   pintos-env /bin/bash
-
-source ~/.bashrc
 ```
 
 ## Install Dependencies
@@ -38,6 +36,7 @@ sudo ln -sf /usr/bin/gcc-4.4 /usr/bin/gcc
 sudo apt-get install -y \
     qemu wget tar vim \
     libx11-dev libxpm-dev 
+
 ```
 
 ## Make
