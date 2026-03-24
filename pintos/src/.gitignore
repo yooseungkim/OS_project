@@ -1,0 +1,20 @@
+# --- Indexing Files ---
+cscope.files
+cscope.out
+TAGS
+tags
+
+# --- Build Artifacts ---
+# 모든 디렉토리 하위의 build 폴더 전체 제외
+**/build/
+
+# 개별 컴파일 결과물 및 의존성 파일
+*.o
+*.d
+*.bin
+*.stamp
+
+# --- Utilities (src/utils 하위의 실행 파일들) ---
+src/utils/setitimer-helper
+src/utils/squish-pty
+src/utils/squish-unixs
