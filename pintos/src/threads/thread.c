@@ -98,6 +98,9 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+
+  /* Alarm Clock */
+  list_init (&sleep_list) /* threads that should be woken up will be added to the list */
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
