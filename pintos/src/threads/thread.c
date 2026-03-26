@@ -608,3 +608,14 @@ void thread_sleep(int64_t ticks) {
 
   intr_set_level(old_level); // return back to previous interrupt level 
 }
+
+bool less_wakeup_ticks(const struct list_elem *elem_a, const struct list_elem *elem_b, void *aux UNUSED) {
+  /* void *aux: given auxiliary data, to match args of typedef `list_less_func` in `list.h` */
+
+  /* given pointer of `thread.elem`, find pointer of `thread` */
+  struct thread *thread_a = list_entry(elem_a, struct thread, elem); /* thread pointer whose `elem` is elem_a */
+  struct thread *thread_b = list_entry(elem_b, struct thread, elem); /* thread pointer whose `elem` is  elem_b */
+
+  /* compare wakeup ticks between two threads */
+  return thread_a->wakeup_ticks < thread_b->wakeup_ticks;
+}

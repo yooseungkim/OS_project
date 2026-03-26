@@ -113,9 +113,6 @@ extern bool thread_mlfqs;
 void thread_init (void);
 void thread_start (void);
 
-/* Alarm Clock */
-void thread_sleep (int64_t);
-
 void thread_tick (void);
 void thread_print_stats (void);
 
@@ -143,5 +140,9 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/* Alarm Clock */
+void thread_sleep (int64_t);
+bool less_thread_wakeup_ticks(const struct list_elem *, const struct list_elem * , void *aux); // helper functions for thread sort
 
 #endif /* threads/thread.h */
