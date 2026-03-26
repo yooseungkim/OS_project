@@ -24,6 +24,9 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* Alarm Clock*/
+static struct list sleep_list; /* keeps sleeping threads (in ascending order)*/
+
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -92,6 +95,8 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  /* Alarm Clock */
+  list_init (&sleep_list); /* initialize `sleep_thread` */
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -99,8 +104,6 @@ thread_init (void)
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
 
-  /* Alarm Clock */
-  list_init (&sleep_list) /* threads that should be woken up will be added to the list */
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -591,8 +594,6 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 
 /* Alarm Clock */
-static struct list sleep_list; /* keeps sleeping threads (in ascending order)*/
-
 void thread_sleep(int64_t ticks) { 
 
   /*Set interrupt off while modifying shared resource (`sleep_list`), to prevent race condition.*/
@@ -603,7 +604,7 @@ void thread_sleep(int64_t ticks) {
   cur = thread_current();     
   ASSERT(cur != idle_thread); // check if current thread is in idle state
 
-  curr->wakeup_ticks = ticks;     // store 'ticks to wake up'
+  cur->wakeup_ticks = ticks;     // store 'ticks to wake up'
   list_insert_ordered(&sleep_list, &cur->elem, less_thread_wakeup_ticks, NULL); // add to sleep list (in ascending order)
   thread_block(); // context switch, wail untile `thread_unblock()` is called
 
