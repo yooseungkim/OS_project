@@ -591,10 +591,11 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 
 /* Alarm Clock */
+static struct list sleep_list; /* keeps sleeping threads (in ascending order)*/
+
 void thread_sleep(int64_t ticks) { 
-  /* intr := interrupt 
-  Set interrupt off while modifying shared resource (sleep_list), to prevent race condition.
-  */
+
+  /*Set interrupt off while modifying shared resource (`sleep_list`), to prevent race condition.*/
   enum intr_level old_level;
   old_level = intr_disable(); 
 
@@ -603,13 +604,40 @@ void thread_sleep(int64_t ticks) {
   ASSERT(cur != idle_thread); // check if current thread is in idle state
 
   curr->wakeup_ticks = ticks;     // store 'ticks to wake up'
-  list_insert_ordered(&sleep_list, &cur->elem, cmp_thread_ticks, NULL); // add to sleep list
+  list_insert_ordered(&sleep_list, &cur->elem, less_thread_wakeup_ticks, NULL); // add to sleep list (in ascending order)
   thread_block(); // context switch, wail untile `thread_unblock()` is called
 
   intr_set_level(old_level); // return back to previous interrupt level 
 }
 
-bool less_wakeup_ticks(const struct list_elem *elem_a, const struct list_elem *elem_b, void *aux UNUSED) {
+void thread_wakeup(int64_t ticks) {
+  /*Set interrupt off while modifying shared resource (sleep_list), to prevent race condition.*/
+  enum intr_level old_level; 
+  old_level = intr_disable();
+  
+
+  struct list_elem *cur_elem = list_begin(&sleep_list);
+
+  while (cur_elem != list_end(&sleep_list)) { /* traversal through the `sleep_list` */
+    struct thread *cur_thread = list_entry(cur_elem, struct thread, elem); 
+    
+    if (ticks >= cur_thread->wakeup_ticks) {
+      cur_elem = list_remove(cur_elem);  /*remove from `sleep_list` and point the next element*/
+      thread_unblock(cur_thread); /* move to `ready_list` */
+    }
+
+    else {
+      /* `sleep_list` will be sorted in ascending order with respect to `wakeup` ticks
+          i.e., threads on the front will wake up earlier */
+      break; 
+    }
+  }
+
+  intr_set_level(old_level);
+}
+
+
+bool less_thread_wakeup_ticks(const struct list_elem *elem_a, const struct list_elem *elem_b, void *aux UNUSED) {
   /* void *aux: given auxiliary data, to match args of typedef `list_less_func` in `list.h` */
 
   /* given pointer of `thread.elem`, find pointer of `thread` */
