@@ -315,15 +315,15 @@ thread_exit (void)
 void
 thread_yield (void) 
 {
-  struct thread *cur = thread_current ();
+  struct thread *cur_thread = thread_current ();
   enum intr_level old_level;
   
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
-  cur->status = THREAD_READY;
+  if (cur_thread != idle_thread) 
+    list_push_back (&ready_list, &cur_thread->elem);
+  cur_thread->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
 }
@@ -594,29 +594,42 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 
 /* Alarm Clock */
+
+/* keep track of next wakeup tick (for optimal logics)*/
+static int64_t next_wakeup_tick = INT64_MAX;
+
 void thread_sleep(int64_t ticks) { 
 
   /*Set interrupt off while modifying shared resource (`sleep_list`), to prevent race condition.*/
   enum intr_level old_level;
   old_level = intr_disable(); 
 
-  struct thread *cur;
-  cur = thread_current();     
-  ASSERT(cur != idle_thread); // check if current thread is in idle state
+  struct thread *cur_thread;
+  cur_thread = thread_current();     
+  ASSERT(cur_thread != idle_thread); /* check if current thread is in idle state */
 
-  cur->wakeup_ticks = ticks;     // store 'ticks to wake up'
-  list_insert_ordered(&sleep_list, &cur->elem, less_thread_wakeup_ticks, NULL); // add to sleep list (in ascending order)
-  thread_block(); // context switch, wail untile `thread_unblock()` is called
+  cur_thread->wakeup_ticks = ticks;     /* store 'ticks to wake up' */
 
-  intr_set_level(old_level); // return back to previous interrupt level 
+  if (ticks < next_wakeup_tick) {
+    next_wakeup_tick = ticks; /* update next_wakeup_tick*/
+  }
+  list_insert_ordered(&sleep_list, &cur_thread->elem, less_thread_wakeup_ticks, NULL); /* add to sleep list (in ascending order) */
+  thread_block(); /* context switch, wail untile `thread_unblock()` is called */
+
+  intr_set_level(old_level); /* return back to previous interrupt level */
 }
 
 void thread_wakeup(int64_t ticks) {
+
+  /* only loop through sleeping list when something should be woken up*/
+  if (ticks < next_wakeup_tick) {
+    return; 
+  }
+
   /*Set interrupt off while modifying shared resource (sleep_list), to prevent race condition.*/
   enum intr_level old_level; 
   old_level = intr_disable();
   
-
   struct list_elem *cur_elem = list_begin(&sleep_list);
 
   while (cur_elem != list_end(&sleep_list)) { /* traversal through the `sleep_list` */
@@ -628,10 +641,15 @@ void thread_wakeup(int64_t ticks) {
     }
 
     else {
-      /* `sleep_list` will be sorted in ascending order with respect to `wakeup` ticks
-          i.e., threads on the front will wake up earlier */
+      /* `sleep_list` is sorted in ascending order with respect to `wakeup` ticks
+      i.e., threads on the front will wake up earlier */
+      next_wakeup_tick = cur_thread->wakeup_ticks;
       break; 
     }
+  }
+
+  if (list_empty(&sleep_list)) {
+    next_wakeup_tick = INT64_MAX; 
   }
 
   intr_set_level(old_level);
