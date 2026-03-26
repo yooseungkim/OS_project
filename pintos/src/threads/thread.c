@@ -584,7 +584,27 @@ allocate_tid (void)
 
   return tid;
 }
-
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+
+/* Alarm Clock */
+void thread_sleep(int64_t ticks) { 
+  /* intr := interrupt 
+  Set interrupt off while modifying shared resource (sleep_list), to prevent race condition.
+  */
+  enum intr_level old_level;
+  old_level = intr_disable(); 
+
+  struct thread *cur;
+  cur = thread_current();     
+  ASSERT(cur != idle_thread); // check if current thread is in idle state
+
+  curr->wakeup_ticks = ticks;     // store 'ticks to wake up'
+  list_insert_ordered(&sleep_list, &cur->elem, cmp_thread_ticks, NULL); // add to sleep list
+  thread_block(); // context switch, wail untile `thread_unblock()` is called
+
+  intr_set_level(old_level); // return back to previous interrupt level 
+}

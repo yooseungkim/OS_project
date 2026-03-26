@@ -113,6 +113,9 @@ extern bool thread_mlfqs;
 void thread_init (void);
 void thread_start (void);
 
+/* Alarm Clock */
+void thread_sleep (int64_t);
+
 void thread_tick (void);
 void thread_print_stats (void);
 
