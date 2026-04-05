@@ -68,8 +68,12 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_push_back (&sema->waiters, &thread_current ()->elem);
+      /* Priority-Scheduling */
+      // list_push_back (&sema->waiters, &thread_current ()->elem);
+      // 역시 priority 기준으로 삽입되도록 수정
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem, high_thread_priority, NULL);
       thread_block ();
+      /* - */
     }
   sema->value--;
   intr_set_level (old_level);
@@ -113,12 +117,16 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-   
-  /* waiter가 있는 경우, 가장 priority가 높은 thread를 unblock 후 value 증가 */
+
+  /* Priority-Scheduling */
   if (!list_empty (&sema->waiters)) 
+    /* waiter가 있는 경우, 가장 priority가 높은 thread를 unblock 후 value 증가 */
+    /* waiters 역시 항상 priority를 기준으로 정렬 */
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
   sema->value++;
+  cmp_current_priority();
+  /* - */
   intr_set_level (old_level);
 }
 
