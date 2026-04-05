@@ -160,6 +160,10 @@ void thread_update_priority(struct thread *);
 
 void donate_priority(struct thread *);
 
+void thread_update_ready_list(struct thread *);
+void thread_update_waiters(struct thread *);
+void thread_update_donation_list(struct thread *);
+
 void thread_remove_lock_donations(struct lock *);
 
 bool higher_thread_priority(const struct list_elem *,

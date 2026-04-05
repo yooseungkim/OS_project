@@ -700,7 +700,11 @@ void thread_update_priority(struct thread *cur_thread) {
     max_donation = max_donation > highest_donation_thread->priority ? max_donation : highest_donation_thread->priority;
   }
   cur_thread->priority = max_donation;
+  thread_update_ready_list(cur_thread); /* thread의 priority가 변경된 경우 ready_list에 있는 경우, priority 업데이트 */
+  thread_update_waiters(cur_thread); /* thread의 priority가 변경된 경우, waiters 업데이트 */
+  thread_update_donation_list(cur_thread); /* thread의 priority가 변경된 경우, donation list priority 업데이트 */
 }
+
 
 void donate_priority(struct thread *cur_thread) {
   int MAX_DONATION_DEPTH = 8; /* 최대 donation 깊이 */ 
@@ -722,8 +726,8 @@ void donate_priority(struct thread *cur_thread) {
     if (holder_thread->priority >= cur_thread->priority) {
       break; 
     }
-    thread_update_priority(holder_thread); /* donation 수행 */
 
+    thread_update_priority(holder_thread); /* donation 수행 */
 
     cur_thread = holder_thread; /* 다음 donation을 위해 현재 thread 업데이트 */
   }
@@ -762,6 +766,31 @@ void thread_update_ready_list(struct thread *t) {
     list_insert_ordered(&ready_list, &t->elem, higher_thread_priority, NULL); /* priority 기준으로 다시 삽입 */
   }
   /* 이미 대부분 정렬된 list이므로 다시 정렬하는 것 O(NlogN) 보다 제거 후 삽입 O(N)이 더 효과적 */
+  intr_set_level(old_level);
+}
+
+void thread_update_waiters(struct thread *t) {
+  enum intr_level old_level = intr_disable();
+
+  /* thread의 priority가 변경된 경우, lock의 donation_list priority 업데이트 */
+  if (t->status == THREAD_BLOCKED && t->wait_on_lock != NULL) {
+    struct list *waiters = &t->wait_on_lock->semaphore.waiters; /* thread가 기다리고 있는 wait-on-lock의 waiters */
+
+    list_remove(&t->elem); /* waiters에서 제거 후 */
+    list_insert_ordered(waiters, &t->elem, higher_thread_priority, NULL); /* priority 기준으로 다시 삽입 */
+  }
+  intr_set_level(old_level);
+}
+
+void thread_update_donation_list(struct thread *t) {
+  enum intr_level old_level = intr_disable();
+
+  if (t->wait_on_lock != NULL && t->wait_on_lock->holder != NULL) {
+    struct thread *holder_thread = t->wait_on_lock->holder; /* thread가 기다리고 있는 wait-on-lock의 holder */
+
+    list_remove(&t->donation_elem); /* donation list에서 제거 후 */
+    list_insert_ordered(&holder_thread->donations, &t->donation_elem, higher_thread_donation_priority, NULL); /* priority 기준으로 다시 삽입 */
+  }
   intr_set_level(old_level);
 }
 
