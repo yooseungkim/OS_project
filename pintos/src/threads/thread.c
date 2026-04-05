@@ -104,7 +104,6 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -487,6 +486,13 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+
+  /* Priority-Scheduling */
+  t->base_priority = priority; /* donation 받기 전 기본 priority */
+  t->wait_on_lock = NULL; 
+  list_init(&t->donations);
+  /* donation_elem에는 명시적인 init 필요 X */
+  /* - */
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

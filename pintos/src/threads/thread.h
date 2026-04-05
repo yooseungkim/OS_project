@@ -96,6 +96,12 @@ struct thread
     /* Alarm Clock */
     int wakeup_ticks;                   /* Will be woken up after this amount of ticks */
 
+    /* Priority-Scheduling */
+    int base_priority; /* donation 받기 전 기본 priority */
+    struct lock *wait_on_lock; /* 기다리고 있는 lock */
+    struct list donations; /* 받은 donation (다른 thread의 donation_elem의 list)*/
+    struct list_elem donation_elem; /* 다른 thread의 donation에 포함되기 위한 list_elem */
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
