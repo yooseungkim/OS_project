@@ -4,6 +4,7 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
+#include "list.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -212,8 +213,10 @@ thread_create (const char *name, int priority,
 
   intr_set_level (old_level);
 
+  /* Priority-Scheduling */
   /* Add to run queue. */
-  thread_unblock (t);
+  thread_unblock (t); /* priority 기준으로 삽입되도록 수정 */
+  cmp_current_priority(); /* 추가된 thread의 priority가 현재 thread의 priority보다 높은 경우 전환 */
 
   return tid;
 }
@@ -251,7 +254,11 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  /* Priority-Scheduling */
+  // list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, high_thread_priority, NULL);
+  /* - */
+
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -322,7 +329,10 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur_thread != idle_thread) 
-    list_push_back (&ready_list, &cur_thread->elem);
+    /* Priority-Scheduling */
+    // list_push_back (&ready_list, &cur_thread->elem);
+    list_insert_ordered (&ready_list, &cur_thread->elem, high_thread_priority, NULL);
+    /* - */
   cur_thread->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -350,6 +360,7 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  cmp_current_priority(); /* 현재 thread의 priority가 낮게 변경된 경우 thread 전환 */
 }
 
 /* Returns the current thread's priority. */
@@ -502,6 +513,7 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
+    /* 가장 첫 번째 thread 반환, 우리의 ready_list는 priority 기준으로 정렬되어 있으므로 해당 방식 유지 */
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
@@ -666,3 +678,31 @@ bool less_thread_wakeup_ticks(const struct list_elem *elem_a, const struct list_
   /* compare wakeup ticks between two threads */
   return thread_a->wakeup_ticks < thread_b->wakeup_ticks;
 }
+
+
+/* Priority-Scheduling */
+
+bool high_thread_priority(const struct list_elem *elem_a, const struct list_elem *elem_b, void *aux UNUSED) {
+  /* void *aux: given auxiliary data, to match args of typedef `list_less_func` in `list.h` */
+
+  /* given pointer of `thread.elem`, find pointer of `thread` */
+  struct thread *thread_a = list_entry(elem_a, struct thread, elem); /* thread pointer whose `elem` is elem_a */
+  struct thread *thread_b = list_entry(elem_b, struct thread, elem); /* thread pointer whose `elem` is  elem_b */
+
+  /* compare priorities between two threads */
+  return thread_a->priority > thread_b->priority;
+}
+
+void cmp_current_priority() {
+  if (list_empty(&ready_list)) {
+    return; 
+  }
+
+  tid_t cur_priority = thread_current()->priority;
+  tid_t front_priority = list_entry(list_front(&ready_list), struct thread, elem)->priority;
+
+  if (cur_priority < front_priority) {
+    thread_yield(); /* 현재 thread의 priority가 낮으면 thread 전환*/
+  }
+}
+/* - */

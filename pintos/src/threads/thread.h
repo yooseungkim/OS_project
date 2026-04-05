@@ -144,6 +144,16 @@ int thread_get_load_avg (void);
 /* Alarm Clock */
 void thread_sleep(int64_t);
 void thread_wakeup(int64_t);
-bool less_thread_wakeup_ticks(const struct list_elem *, const struct list_elem * , void *aux); /* helper functions for thread sort */
+bool less_thread_wakeup_ticks(const struct list_elem *,
+                              const struct list_elem *,
+                              void *aux); /* helper function for thread sort */
+/* - */
+
+/* Priority-Scheduling */
+bool high_thread_priority(const struct list_elem *,
+                              const struct list_elem *,
+                              void *aux); /* helper function for thread sort */
+void cmp_current_priority(void);
+/* - */
 
 #endif /* threads/thread.h */
