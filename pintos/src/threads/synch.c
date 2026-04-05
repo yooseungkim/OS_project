@@ -71,7 +71,7 @@ sema_down (struct semaphore *sema)
       /* Priority-Scheduling */
       // list_push_back (&sema->waiters, &thread_current ()->elem);
       // 역시 priority 기준으로 삽입되도록 수정
-      list_insert_ordered (&sema->waiters, &thread_current ()->elem, high_thread_priority, NULL);
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem, higher_thread_priority, NULL);
       thread_block ();
       /* - */
     }
@@ -123,12 +123,12 @@ sema_up (struct semaphore *sema)
     /* waiter가 있는 경우, 가장 priority가 높은 thread를 unblock 후 value 증가 */
     /* waiters 역시 항상 priority를 기준으로 정렬 */
 
-    list_sort(&sema->waiters, high_thread_priority, NULL);
+    list_sort(&sema->waiters, higher_thread_priority, NULL);
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
   }
   sema->value++;
-  cmp_current_priority();
+  thread_preemption();
   /* - */
   intr_set_level (old_level);
 }
@@ -209,10 +209,27 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  struct thread *cur_thread = thread_current(); 
+
+  enum intr_level old_level = intr_disable();
+  /* 이미 누군가가 lock을 소유한 경우 */
+  if (lock->holder) { 
+    cur_thread->wait_on_lock = lock; /* 현재 thread가 기다리는 lock 저장 */
+
+    /* 현재 lock holder의 donation 리스트에 추가 (단, 역시 priority 기준으로)*/
+    list_insert_ordered(&lock->holder->donations, &cur_thread->donation_elem, higher_thread_donation_priority, NULL);
+
+    donate_priority(cur_thread); /* 현재 thread의 priority를 donation */
+  } 
+
   /* 기존 lock holder가 release 하기 전까지 blocked 상태 */
   sema_down (&lock->semaphore);
+
   /* lock을 현재 thread가 소유하도록 설정 */
+  cur_thread->wait_on_lock = NULL; /* 기다리는 lock 초기화 */
   lock->holder = thread_current ();
+
+  intr_set_level(old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -245,6 +262,8 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+
+  thread_remove_lock_donations(lock); /* lock과 관련된 donation 제거 및 priority 업데이트 */
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);

@@ -99,7 +99,7 @@ struct thread
     /* Priority-Scheduling */
     int base_priority; /* donation 받기 전 기본 priority */
     struct lock *wait_on_lock; /* 기다리고 있는 lock */
-    struct list donations; /* 받은 donation (다른 thread의 donation_elem의 list)*/
+    struct list donations; /* 받은 donation (다른 thread의 donation_elem의 list) --> 내림차순 정렬*/
     struct list_elem donation_elem; /* 다른 thread의 donation에 포함되기 위한 list_elem */
 
 #ifdef USERPROG
@@ -156,10 +156,20 @@ bool less_thread_wakeup_ticks(const struct list_elem *,
 /* - */
 
 /* Priority-Scheduling */
-bool high_thread_priority(const struct list_elem *,
+void thread_update_priority(struct thread *);
+
+void donate_priority(struct thread *);
+
+void thread_remove_lock_donations(struct lock *);
+
+bool higher_thread_priority(const struct list_elem *,
                               const struct list_elem *,
                               void *aux); /* helper function for thread sort */
-void cmp_current_priority(void);
+
+bool higher_thread_donation_priority(const struct list_elem *,
+                              const struct list_elem *,
+                              void *aux); /* helper function for thread sort */
+void thread_preemption(void);
 /* - */
 
 #endif /* threads/thread.h */
