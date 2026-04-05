@@ -754,6 +754,16 @@ bool higher_thread_donation_priority(const struct list_elem *elem_a, const struc
   return max_donation_thread_a->priority > max_donation_thread_b->priority;
 }
 
+void thread_update_ready_list(struct thread *t) {
+  enum intr_level old_level = intr_disable();
+  /* thread의 priority가 변경된 경우에 ready_list에 있는 경우, priority update */
+  if (t->status == THREAD_READY) {
+    list_remove(&t->elem); /* ready_list에서 제거 */
+    list_insert_ordered(&ready_list, &t->elem, higher_thread_priority, NULL); /* priority 기준으로 다시 삽입 */
+  }
+  /* 이미 대부분 정렬된 list이므로 다시 정렬하는 것 O(NlogN) 보다 제거 후 삽입 O(N)이 더 효과적 */
+  intr_set_level(old_level);
+}
 
 void thread_remove_lock_donations(struct lock *lock) {
   struct thread *cur_thread = thread_current();
