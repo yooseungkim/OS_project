@@ -65,4 +65,7 @@ pintos -q run alarm-multiple
 
 Your initial working directory will be `~/pintos/` .
 
+Use `pb` (pintos build) after update (it runs `make` in threads and utils directory)
+or, you can use `pball` (pintos build all). (it runs `make clean && make` instead)
+
 `~/pintos/src/utils` will be automatically added to `PATH` .
