@@ -254,7 +254,7 @@ lock_held_by_current_thread (const struct lock *lock)
   ASSERT (lock != NULL);
 
   return lock->holder == thread_current ();
-}
+} 
 
 /* One semaphore in a list. */
 struct semaphore_elem 
@@ -305,7 +305,11 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_push_back (&cond->waiters, &waiter.elem);
+  /* Priority-Scheduling */
+  // list_push_back (&cond->waiters, &waiter.elem);
+  // 역시 priority 기준으로 삽입되도록 수정
+  list_insert_ordered(&cond->waiters, &waiter.elem, high_sema_priority, NULL);
+  /* - */
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -346,3 +350,29 @@ cond_broadcast (struct condition *cond, struct lock *lock)
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
 }
+
+/* Priority-Scheduling */
+bool high_sema_priority(const struct list_elem *elem_a, const struct list_elem *elem_b, void *aux UNUSED) {
+  /* void *aux: given auxiliary data, to match args of typedef `list_less_func` in `list.h` */
+
+  struct semaphore_elem *sema_a = list_entry(elem_a, struct semaphore_elem, elem); 
+  struct semaphore_elem *sema_b = list_entry(elem_b, struct semaphore_elem, elem); 
+
+  if (list_empty(&sema_a->semaphore.waiters)) {
+    return false; /* sema_a의 waiter가 없는 경우, sema_b가 더 priority가 높은 것으로 설정  */
+  } 
+  if (list_empty(&sema_b->semaphore.waiters)){
+    return true; /* sema_b의 waiter가 없는 경우, sema_a가 더 priority가 높은 것으로 설정 */
+  }
+  struct list *waiter_a = &(sema_a->semaphore.waiters);
+  struct list *waiter_b = &(sema_b->semaphore.waiters);
+
+  /* 두 semaphore의 waiter에 있는 thread 중 더 priority가 높은 것으로 선택*/
+  tid_t priority_a = list_entry(list_front(waiter_a), struct thread, elem)->priority;
+  tid_t priority_b = list_entry(list_front(waiter_b), struct thread, elem)->priority;
+
+  /* compare priorities between two semaphores*/
+  return priority_a > priority_b;
+}
+
+/* - */

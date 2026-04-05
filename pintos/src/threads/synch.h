@@ -48,4 +48,9 @@ void cond_broadcast (struct condition *, struct lock *);
    reference guide for more information.*/
 #define barrier() asm volatile ("" : : : "memory")
 
+/* Priority-Scheduling */
+bool high_sema_priority(const struct list_elem *, const struct list_elem *,
+                          void *aux); /* helper function for thread sort */
+/* - */
+
 #endif /* threads/synch.h */
