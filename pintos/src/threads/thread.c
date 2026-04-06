@@ -815,8 +815,8 @@ void thread_preemption() {
     return; 
   }
 
-  tid_t cur_priority = thread_current()->priority;
-  tid_t front_priority = list_entry(list_front(&ready_list), struct thread, elem)->priority;
+  int cur_priority = thread_current()->priority;
+  int front_priority = list_entry(list_front(&ready_list), struct thread, elem)->priority;
 
   if (cur_priority < front_priority) {
     thread_yield(); /* 현재 thread의 priority가 낮으면 thread 전환*/
