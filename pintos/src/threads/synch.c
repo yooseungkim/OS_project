@@ -393,8 +393,8 @@ bool high_sema_priority(const struct list_elem *elem_a, const struct list_elem *
   struct list *waiter_b = &(sema_b->semaphore.waiters);
 
   /* 두 semaphore의 waiter에 있는 thread 중 더 priority가 높은 것으로 선택*/
-  tid_t priority_a = list_entry(list_front(waiter_a), struct thread, elem)->priority;
-  tid_t priority_b = list_entry(list_front(waiter_b), struct thread, elem)->priority;
+  int priority_a = list_entry(list_front(waiter_a), struct thread, elem)->priority;
+  int priority_b = list_entry(list_front(waiter_b), struct thread, elem)->priority;
 
   /* compare priorities between two semaphores*/
   return priority_a > priority_b;
