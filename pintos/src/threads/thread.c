@@ -452,7 +452,7 @@ kernel_thread (thread_func *function, void *aux)
   function (aux);       /* Execute the thread function. */
   thread_exit ();       /* If function() returns, kill the thread. */
 }
-
+
 /* Returns the running thread. */
 struct thread *
 running_thread (void) 
@@ -811,15 +811,21 @@ void thread_remove_lock_donations(struct lock *lock) {
 }
 
 void thread_preemption() {
-  if (list_empty(&ready_list)) {
-    return; 
+  enum intr_level old_level = intr_disable(); 
+  
+  if (!list_empty(&ready_list)) {
+    int cur_priority = thread_current()->priority;
+    int front_priority = list_entry(list_front(&ready_list), struct thread, elem)->priority;
+    
+    if (cur_priority < front_priority) {
+      if (intr_context()) {
+        intr_yield_on_return(); /* interrupt handler의 경우 return 시에 yield 하도록 */
+      }
+      else {
+        thread_yield();
+      }
+    }
   }
-
-  int cur_priority = thread_current()->priority;
-  int front_priority = list_entry(list_front(&ready_list), struct thread, elem)->priority;
-
-  if (cur_priority < front_priority) {
-    thread_yield(); /* 현재 thread의 priority가 낮으면 thread 전환*/
-  }
+  intr_set_level(old_level); 
 }
 /* - */
