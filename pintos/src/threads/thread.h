@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/fixed-point.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -23,6 +24,12 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* Multi-Level Feedback Queue Scheduler */
+#define RECENT_CPU_DEFAULT 0
+#define NICE_DEFAULT 0
+#define NICE_MIN -20
+#define NICE_MAX 20
 
 /* A kernel thread or user process.
 
@@ -102,6 +109,10 @@ struct thread
     struct list donations; /* 받은 donation (다른 thread의 donation_elem의 list) --> 내림차순 정렬*/
     struct list_elem donation_elem; /* 다른 thread의 donation에 포함되기 위한 list_elem */
 
+    /* Multi-Level Feedback Queue Scheduler */
+    int nice;
+    fixedpoint_t recent_cpu;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -175,5 +186,9 @@ bool higher_thread_donation_priority(const struct list_elem *,
                               void *aux); /* helper function for thread sort */
 void thread_preemption(void);
 /* - */
+
+/* Multi-Level Feedback Queue Scheduler */
+void thread_mlfqs_on_tick(bool per_sec, bool per_fourth);
+/* end of Multi-Level Feedback Queue Scheduler */
 
 #endif /* threads/thread.h */
