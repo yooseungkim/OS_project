@@ -358,6 +358,9 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  /* Multi-Level Feedback Queue Scheduler */
+  if (thread_mlfqs) return;
+
   struct thread *cur_thread = thread_current();
   cur_thread->base_priority = new_priority;
 
