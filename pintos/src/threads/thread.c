@@ -533,6 +533,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->wait_on_lock = NULL;
   list_init(&t->donations);
   /* donation_elem에는 명시적인 init 필요 X */
+
+  /* System Call */ 
+  t->next_fd = 2; /* 0, 1 are reserved for stdin, stdout */
   /* - */
 }
 

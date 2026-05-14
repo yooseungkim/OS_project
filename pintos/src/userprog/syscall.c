@@ -12,6 +12,7 @@ static void syscall_handler (struct intr_frame *);
 struct lock filesys_lock; 
 
 void validate_address(void *addr);
+int add_file_to_fdt(struct file *file);
 
 void halt (void);
 void exit (int status);
@@ -71,6 +72,21 @@ syscall_handler (struct intr_frame *f UNUSED)
       lock_release(&filesys_lock);
       break;
     case SYS_OPEN:
+      validate_address(esp + 1); 
+      
+      char *file_name = *(char **) esp + 1; 
+      validate_address(file_name); 
+
+      lock_acquire(&filesys_lock); 
+
+      struct file *opened_file = filesys_open(file_name); 
+      /* if failed to open, return -1*/
+      if (opened_file == NULL) {
+        f->eax = -1; 
+      } else {
+        f->eax = add_file_to_fdt(opened_file); 
+      }
+      lock_release(&filesys_lock);
       break;
     case SYS_FILESIZE:
       break;
@@ -127,6 +143,19 @@ void validate_address(void *addr) {
   if (addr == NULL || !is_user_vaddr(addr)) {
     exit(-1); 
   }
+}
+
+int add_file_to_fdt(struct file *file) {
+  struct thread *curr = thread_current(); 
+  
+  while (curr->next_fd < 128 && curr->fdt[curr->next_fd] != NULL) {
+    curr->next_fd++; 
+  }
+
+  if (curr->next_fd >= 128) {return -1;}
+
+  curr->fdt[curr->next_fd] = file; 
+  return curr->next_fd;  
 }
 
 void halt() {

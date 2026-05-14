@@ -113,6 +113,10 @@ struct thread
     int nice;
     fixedpoint_t recent_cpu;
 
+    /* System Call*/
+    struct file *fdt[128];  /* file descriptor table, max 128 files per process*/
+    int next_fd; /* next available file descriptor */
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
