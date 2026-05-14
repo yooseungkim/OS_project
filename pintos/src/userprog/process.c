@@ -49,9 +49,10 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (parsed_file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+  if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
     return tid; 
+  }
 
   struct thread *child = get_thread_by_tid(tid); 
   if (child != NULL) {
@@ -111,8 +112,8 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  timer_msleep(100);
-  return -1;
+  // timer_msleep(100);
+  // return -1;
   /* -- */
   
   struct thread *child = get_thread_by_tid(child_tid);

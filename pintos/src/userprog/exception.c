@@ -5,6 +5,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+#include "userprog/syscall.h"
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -126,6 +128,10 @@ page_fault (struct intr_frame *f)
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
+
+  if (user) {
+      exit(-1);
+  }
 
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
