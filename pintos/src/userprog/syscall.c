@@ -20,7 +20,7 @@ static void validate_address(void *addr);
 static int add_file_to_fdt(struct file *file);
 static void close_file_by_fd(int fd);
 
-/* Syscall Prototypes (matching lib/user/syscall.h) */
+/* Syscall Prototypes */
 void halt (void);
 void exit (int status);
 pid_t exec (const char *file);
@@ -56,10 +56,12 @@ syscall_handler (struct intr_frame *f)
       break; 
     case SYS_EXIT:
       validate_address(esp + 1);
+      /* status */
       exit((int) esp[1]);
       break;
     case SYS_EXEC:
       validate_address(esp + 1);
+      /* */
       f->eax = exec((const char *) esp[1]);
       break;
     case SYS_WAIT:
@@ -147,13 +149,11 @@ void exit(int status) {
 
 pid_t exec(const char *file) {
   validate_address((void *)file);
-  /* Not implemented */
-  return -1;
+return process_execute(file); 
 }
 
-int wait(pid_t pid UNUSED) {
-  /* Not implemented */
-  return -1;
+int wait(pid_t pid) {
+  return process_wait(pid); 
 }
 
 bool create(const char *file, unsigned initial_size) {

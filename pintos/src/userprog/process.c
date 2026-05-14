@@ -51,6 +51,15 @@ process_execute (const char *file_name)
   tid = thread_create (parsed_file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+    return tid; 
+
+  struct thread *child = get_thread_by_tid(tid); 
+  if (child != NULL) {
+    sema_down(&child->load_sema);
+    if (!child->load_success) {
+      return TID_ERROR; 
+    }
+  }
   return tid;
 }
 
@@ -69,6 +78,11 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+
+  /* load child process */
+  struct thread *curr = thread_current(); 
+  curr->load_success = success; 
+  sema_up(&curr->load_sema); 
 
   /* If load failed, quit. */
   palloc_free_page (file_name);

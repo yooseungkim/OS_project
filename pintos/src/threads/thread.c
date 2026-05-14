@@ -225,6 +225,9 @@ thread_create (const char *name, int priority,
   thread_unblock (t); /* priority 기준으로 삽입되도록 수정 */
   thread_preemption(); /* 추가된 thread의 priority가 현재 thread의 priority보다 높은 경우 전환 */
 
+  /* System Call*/
+  sema_init(&t->load_sema, 0);
+  t->load_success = false;
   return tid;
 }
 
@@ -927,4 +930,14 @@ void thread_mlfqs_on_tick(bool per_sec, bool per_fourth) {
     list_sort(&ready_list, higher_thread_priority, NULL);
     thread_preemption();
   }
+}
+/* System Call */
+struct thread *get_thread_by_tid(tid_t tid) {
+  struct list_elem *e; 
+  /* iterate through all_list to find thread with given tid */
+  for(e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+    struct thread *t = list_entry(e, struct thread, allelem);
+    if (t->tid == tid) return t; 
+  } 
+  return NULL;
 }
