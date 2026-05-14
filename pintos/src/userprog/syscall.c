@@ -7,16 +7,35 @@
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
 #include "userprog/process.h"
+#include "threads/synch.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 
 static void syscall_handler (struct intr_frame *);
 struct lock filesys_lock; 
 
 void validate_address(void *addr);
 int add_file_to_fdt(struct file *file);
+void close_file_by_fd(int fd);
 
 void halt (void);
 void exit (int status);
 int write (int fd, const void *buffer, unsigned size);
+
+/* Syscall Helper Functions */
+void sys_halt(struct intr_frame *f);
+void sys_exit(struct intr_frame *f);
+void sys_exec(struct intr_frame *f);
+void sys_wait(struct intr_frame *f);
+void sys_create(struct intr_frame *f);
+void sys_remove(struct intr_frame *f);
+void sys_open(struct intr_frame *f);
+void sys_filesize(struct intr_frame *f);
+void sys_read(struct intr_frame *f);
+void sys_write(struct intr_frame *f);
+void sys_seek(struct intr_frame *f);
+void sys_tell(struct intr_frame *f);
+void sys_close(struct intr_frame *f);
 
 
 void
@@ -27,89 +46,53 @@ syscall_init (void)
 }
 
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f) 
 {
   uint32_t *esp = f->esp; 
   validate_address(esp); 
 
-
-  int syscall_number = *(int *)esp; 
+  int syscall_number = (int) esp[0]; 
 
   switch (syscall_number) {
   /* Project 2 and later*/
     case SYS_HALT:
-      halt(); 
+      sys_halt(f);
       break; 
     case SYS_EXIT:
-      validate_address(esp + 1);
-      int status = *(int *) esp + 1; 
-      exit(status); 
+      sys_exit(f);
       break;
     case SYS_EXEC:
+      sys_exec(f);
       break;
     case SYS_WAIT:
+      sys_wait(f);
       break;
     case SYS_CREATE:
-      validate_address(esp + 1); 
-      validate_address(esp + 2); 
-      
-      char *file_name = *(char **) esp + 1; 
-      validate_address(file_name); 
-      unsigned size = *(unsigned *) esp + 2; 
-
-      lock_acquire(&filesys_lock); 
-      f->eax = filesys_create(file_name, size); 
-      lock_release(&filesys_lock);
+      sys_create(f);
       break;
     case SYS_REMOVE:
-      validate_address(esp + 1); 
-      
-      char *file_name = *(char **) esp + 1; 
-      validate_address(file_name); 
-      
-      lock_acquire(&filesys_lock); 
-      f->eax = filesys_remove(file_name); 
-      lock_release(&filesys_lock);
+      sys_remove(f);
       break;
     case SYS_OPEN:
-      validate_address(esp + 1); 
-      
-      char *file_name = *(char **) esp + 1; 
-      validate_address(file_name); 
-
-      lock_acquire(&filesys_lock); 
-
-      struct file *opened_file = filesys_open(file_name); 
-      /* if failed to open, return -1*/
-      if (opened_file == NULL) {
-        f->eax = -1; 
-      } else {
-        f->eax = add_file_to_fdt(opened_file); 
-      }
-      lock_release(&filesys_lock);
+      sys_open(f);
       break;
     case SYS_FILESIZE:
+      sys_filesize(f);
       break;
     case SYS_READ:
+      sys_read(f);
       break;
     case SYS_WRITE:
-      validate_address(esp + 1); 
-      validate_address(esp + 2);
-      validate_address(esp + 3); 
-
-      int fd = *(int *) esp + 1; 
-      void *buffer = *(void **) esp + 2;  
-      /* Make sure to check every pointers */
-      validate_address(buffer); 
-      unsigned size = *(unsigned *) esp + 3; 
-
-      f->eax = write(fd, buffer, size);
+      sys_write(f);
       break;
     case SYS_SEEK:
+      sys_seek(f);
       break;
     case SYS_TELL:
+      sys_tell(f);
       break;
     case SYS_CLOSE:
+      sys_close(f);
       break;
     
     /* Project 3 and optionally project 4 */
@@ -130,10 +113,112 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_INUMBER:
       break;
     default:
+      exit(-1);
       break; 
-
   }
+}
 
+/* --- Syscall Helper Implementations --- */
+
+void sys_halt(struct intr_frame *f UNUSED) {
+  halt();
+}
+
+void sys_exit(struct intr_frame *f) {
+  uint32_t *esp = f->esp;
+  validate_address(esp + 1);
+  int status = (int) esp[1];
+  exit(status);
+}
+
+void sys_exec(struct intr_frame *f UNUSED) {
+  /* Not implemented */
+}
+
+void sys_wait(struct intr_frame *f UNUSED) {
+  /* Not implemented */
+}
+
+void sys_create(struct intr_frame *f) {
+  uint32_t *esp = f->esp;
+  validate_address(esp + 1); 
+  validate_address(esp + 2); 
+  
+  char *file_name = (char *) esp[1]; 
+  validate_address(file_name); 
+  unsigned size = (unsigned) esp[2]; 
+
+  lock_acquire(&filesys_lock); 
+  f->eax = filesys_create(file_name, size); 
+  lock_release(&filesys_lock);
+}
+
+void sys_remove(struct intr_frame *f) {
+  uint32_t *esp = f->esp;
+  validate_address(esp + 1); 
+  
+  char *file_name = (char *) esp[1]; 
+  validate_address(file_name); 
+  
+  lock_acquire(&filesys_lock); 
+  f->eax = filesys_remove(file_name); 
+  lock_release(&filesys_lock);
+}
+
+void sys_open(struct intr_frame *f) {
+  uint32_t *esp = f->esp;
+  validate_address(esp + 1); 
+  
+  char *file_name = (char *) esp[1]; 
+  validate_address(file_name); 
+
+  lock_acquire(&filesys_lock); 
+
+  struct file *opened_file = filesys_open(file_name); 
+  if (opened_file == NULL) {
+    f->eax = -1; 
+  } else {
+    f->eax = add_file_to_fdt(opened_file); 
+  }
+  lock_release(&filesys_lock);
+}
+
+void sys_filesize(struct intr_frame *f UNUSED) {
+  /* Not implemented */
+}
+
+void sys_read(struct intr_frame *f UNUSED) {
+  /* Not implemented */
+}
+
+void sys_write(struct intr_frame *f) {
+  uint32_t *esp = f->esp;
+  validate_address(esp + 1); 
+  validate_address(esp + 2);
+  validate_address(esp + 3); 
+
+  int fd = (int) esp[1]; 
+  void *buffer = (void *) esp[2];  
+  validate_address(buffer); 
+  unsigned size = (unsigned) esp[3]; 
+
+  f->eax = write(fd, buffer, size);
+}
+
+void sys_seek(struct intr_frame *f UNUSED) {
+  /* Not implemented */
+}
+
+void sys_tell(struct intr_frame *f UNUSED) {
+  /* Not implemented */
+}
+
+void sys_close(struct intr_frame *f) {
+  uint32_t *esp = f->esp;
+  validate_address(esp + 1); 
+  int fd = (int) esp[1]; 
+
+  close_file_by_fd(fd);
 }
 
 /* SYSTEM CALL*/
@@ -156,6 +241,23 @@ int add_file_to_fdt(struct file *file) {
 
   curr->fdt[curr->next_fd] = file; 
   return curr->next_fd;  
+}
+
+void close_file_by_fd(int fd) {
+  struct thread *curr = thread_current(); 
+
+  /* filter invalid fd*/
+  if (fd < 2 || fd >= 128) {
+    return; 
+  } 
+
+  if (curr->fdt[fd] != NULL) {
+    lock_acquire(&filesys_lock); 
+    file_close(curr->fdt[fd]); 
+    lock_release(&filesys_lock); 
+    
+    curr->fdt[fd] = NULL;
+  }
 }
 
 void halt() {
