@@ -6,6 +6,7 @@
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
 #include "userprog/process.h"
+#include "userprog/pagedir.h"
 #include "threads/synch.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
@@ -277,7 +278,8 @@ void close(int fd) {
 
 /* --- Internal Helper functions --- */
 static void validate_address(void *addr) {
-  if (addr == NULL || !is_user_vaddr(addr)) {
+  if (addr == NULL || !is_user_vaddr(addr)
+      || pagedir_get_page(thread_current()->pagedir, addr) == NULL) {
     exit(-1); 
   }
 }
