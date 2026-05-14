@@ -2,10 +2,12 @@
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "devices/timer.h"
+#include "stddef.h"
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -39,8 +41,14 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  /* Project 3: parse file name */
+  char file_name_copy[200];
+  char* saved_ptr;
+  strlcpy(file_name_copy, file_name, 200);
+  char* parsed_file_name = strtok_r(file_name_copy, " ", &saved_ptr);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (parsed_file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -202,6 +210,7 @@ static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
+static bool construct_stack(const char*, void**);
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
@@ -223,8 +232,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  /* Project 3: parse file name */
+  char file_name_copy[200];
+  char* saved_ptr;
+  strlcpy(file_name_copy, file_name, 200);
+  char* parsed_file_name = strtok_r(file_name_copy, " ", &saved_ptr);
+
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (parsed_file_name);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -306,6 +321,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
+  construct_stack(file_name, esp);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -464,4 +480,64 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+static bool
+construct_stack(const char* file_name, void** esp) {
+  int i = 0;
+  int argc = 0;
+  char* argv[128]; // stores pointers to args (in file_name_copy)
+  char* arg_addrs[128]; // stores pointers to args in stack
+  size_t total_len = 0;
+  
+  // Parse file_name and args
+  char file_name_copy[200];
+  char* saved_ptr;
+  char* token;
+  strlcpy(file_name_copy, file_name, 200);
+  for(token = strtok_r(file_name_copy, " ", &saved_ptr);
+      token != NULL;
+      token = strtok_r(NULL, " ", &saved_ptr)) {
+    argv[argc++] = token;
+  }
+
+  // Put args into stack
+  for(i = argc - 1; i >= 0; i--) {
+    size_t arg_len = strlen(argv[i]) + 1;
+    *esp -= arg_len;
+
+    memcpy(*esp, argv[i], arg_len);
+    arg_addrs[i] = *esp;
+    total_len += arg_len;
+  }
+
+  // Word(4-byte) alignment
+  int padding = (uintptr_t)(*esp) % 4;
+  *esp -= padding;
+  memset(*esp, 0, padding);
+
+  // Push argv[argc] == NULL to stack
+  *esp -= sizeof(char *);
+  *(char **)(*esp) = NULL;
+
+  // Push argv[i] to stack;
+  for (i = argc - 1; i >= 0; i--) {
+    *esp -= sizeof(char *);
+    *(char **)(*esp) = arg_addrs[i];
+  }
+
+  // Push argv to stack
+  char** argv_start = *esp;
+  *esp -= sizeof(char **);
+  *(char ***)(*esp) = argv_start;
+
+  // Push argc to stack
+  *esp -= sizeof(int);
+  *(int *)(*esp) = argc;
+
+  // Push fake return address of main
+  *esp -= sizeof(void *);
+  *(void **)(*esp) = 0;
+
+  return true;
 }
