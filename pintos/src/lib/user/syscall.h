@@ -45,9 +45,7 @@ bool readdir (int fd, char name[READDIR_MAX_LEN + 1]);
 bool isdir (int fd);
 int inumber (int fd);
 
-/* SYSTEM CALL*/
-void validate_address(void *addr); 
-int add_file_to_fdt(struct file *file);
+
 
 #endif /* lib/user/syscall.h */
 
