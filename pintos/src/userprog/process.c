@@ -112,10 +112,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  // timer_msleep(100);
-  // return -1;
-  /* -- */
-  
+ 
   struct thread *child = get_thread_by_tid(child_tid);
     
     /* 1. 자식이 존재하지 않거나, 이미 완전 종료되어 메모리가 해제된 경우 */

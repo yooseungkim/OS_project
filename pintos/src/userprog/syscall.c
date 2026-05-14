@@ -134,7 +134,7 @@ syscall_handler (struct intr_frame *f)
   }
 }
 
-/* --- Syscall Implementations --- */
+/* System Call */
 
 void halt(void) {
   shutdown_power_off();
