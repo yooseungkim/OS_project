@@ -245,13 +245,30 @@ int write(int fd, const void *buffer, unsigned size) {
   }
 }
 
-void seek(int fd UNUSED, unsigned position UNUSED) {
-  /* Not implemented */
+void seek(int fd, unsigned position) {
+  struct thread *curr = thread_current(); 
+  struct file *file_obj = curr->fdt[fd];
+  
+  if (file_obj == NULL) {
+    return; 
+  }
+
+  lock_acquire(&filesys_lock); 
+  file_seek(file_obj, position); 
+  lock_release(&filesys_lock); 
 }
 
-unsigned tell(int fd UNUSED) {
-  /* Not implemented */
-  return 0;
+unsigned tell(int fd) {
+  struct thread *curr = thread_current(); 
+  struct file *file_obj = curr->fdt[fd]; 
+
+  if (file_obj == NULL) {
+    return -1; 
+  } 
+  lock_acquire(&filesys_lock);
+  int position = file_tell(file_obj);
+  lock_release(&filesys_lock);
+  return position;
 }
 
 void close(int fd) {
