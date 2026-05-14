@@ -142,6 +142,12 @@ process_exit (void)
   sema_up(&cur->exit_sema);
   sema_down(&cur->free_sema);
 
+  /* Unlock executable file */
+  if (cur->executable) {
+    file_close(cur->executable);
+    cur->executable = NULL;
+  }
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -293,7 +299,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
 
-  file_deny_write(file); 
+  /* Lock executable file */
+  file_deny_write(file);
   t->executable = file;
 
   /* Read program headers. */
@@ -366,8 +373,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
   success = true;
 
  done:
-  /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  if (!success) {
+    file_close(file);
+    t->executable = NULL;
+  }
   return success;
 }
 
