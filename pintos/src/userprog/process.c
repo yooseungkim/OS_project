@@ -2,10 +2,12 @@
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "devices/timer.h"
+#include "stddef.h"
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -32,30 +34,25 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 
-  /* Make a copy of FILE_NAME. */
+  /* Make a copy of FILE_NAME.
+     Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  /* 🚀 [추가할 코드] 스택에 안전한 버퍼를 만들고 첫 단어(명령어)만 추출 */
-  char thread_name[16];
-  int i = 0;
-  while (file_name[i] != ' ' && file_name[i] != '\0' && i < 15) {
-      thread_name[i] = file_name[i];
-      i++;
-  }
-  thread_name[i] = '\0'; 
+  /* Project 3: parse file name */
+  char file_name_copy[200];
+  char* saved_ptr;
+  strlcpy(file_name_copy, file_name, 200);
+  char* parsed_file_name = strtok_r(file_name_copy, " ", &saved_ptr);
 
-  /* fn_copy(전체 문자열)는 유지한 채, 추출한 thread_name으로 스레드 생성 */
-  tid = thread_create (thread_name, PRI_DEFAULT, start_process, fn_copy);
-  
+  /* Create a new thread to execute FILE_NAME. */
+  tid = thread_create (parsed_file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
-
   return tid;
 }
-
 
 /* A thread function that loads a user process and starts it
    running. */
@@ -66,79 +63,24 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
-  /* 🚀 [추가할 코드] 파싱을 위한 변수 선언 */
-  char *argv[128];
-  int argc = 0;
-  char *token, *save_ptr;
-
-  /* 🚀 [추가할 코드] 전체 문자열을 띄어쓰기 기준으로 파싱 */
-  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
-      token = strtok_r (NULL, " ", &save_ptr))
-    {
-      argv[argc++] = token;
-    }
-
+  /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  
-  /* 🚀 [수정할 코드] 파일 이름 전체가 아닌, 명령어(argv[0])만 load에 전달 */
-  success = load (argv[0], &if_.eip, &if_.esp);
+  success = load (file_name, &if_.eip, &if_.esp);
 
-  /* 3. Setup User Stack */
-  if (success)
-    {
-      int i;
-      void *argv_addr[128]; /* 스택에 들어간 문자열들의 실제 주소를 기억할 배열 */
-
-      /* 1. 문자열 데이터 Push (역순) */
-      for (i = argc - 1; i >= 0; i--) 
-        {
-          size_t len = strlen (argv[i]) + 1; /* \0 포함 길이 */
-          if_.esp -= len;
-          memcpy (if_.esp, argv[i], len);
-          argv_addr[i] = if_.esp; /* 나중에 주소를 기록하기 위해 임시 저장 */
-        }
-
-      /* 2. Word Alignment (4의 배수로 esp 정렬) */
-      while ((uint32_t) if_.esp % 4 != 0) 
-        {
-          if_.esp -= 1;
-          *(uint8_t *) if_.esp = 0; /* 빈 공간은 0으로 채움 */
-        }
-
-      /* 3. NULL 포인터 Push (argv 배열의 끝) */
-      if_.esp -= sizeof (char *);
-      *(char **) if_.esp = NULL;
-
-      /* 4. 문자열 주소(포인터) Push (역순) */
-      for (i = argc - 1; i >= 0; i--) 
-        {
-          if_.esp -= sizeof (char *);
-          *(char **) if_.esp = argv_addr[i];
-        }
-
-      /* 5. argv 주소 Push (방금 넣은 argv[0]의 주소를 가리킴) */
-      void *argv_start = if_.esp; 
-      if_.esp -= sizeof (char **);
-      *(char ***) if_.esp = argv_start;
-
-      /* 6. argc Push */
-      if_.esp -= sizeof (int);
-      *(int *) if_.esp = argc;
-
-      /* 7. Dummy Return Address Push (0) */
-      if_.esp -= sizeof (void *);
-      *(void **) if_.esp = NULL;
-    }
-
-  hex_dump (if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
-
+  /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
 
+  /* Start the user process by simulating a return from an
+     interrupt, implemented by intr_exit (in
+     threads/intr-stubs.S).  Because intr_exit takes all of its
+     arguments on the stack in the form of a `struct intr_frame',
+     we just point the stack pointer (%esp) to our stack frame
+     and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -268,6 +210,7 @@ static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
+static bool construct_stack(const char*, void**);
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
@@ -289,8 +232,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  /* Project 3: parse file name */
+  char file_name_copy[200];
+  char* saved_ptr;
+  strlcpy(file_name_copy, file_name, 200);
+  char* parsed_file_name = strtok_r(file_name_copy, " ", &saved_ptr);
+
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (parsed_file_name);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -372,6 +321,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
+  construct_stack(file_name, esp);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -530,4 +480,64 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+static bool
+construct_stack(const char* file_name, void** esp) {
+  int i = 0;
+  int argc = 0;
+  char* argv[128]; // stores pointers to args (in file_name_copy)
+  char* arg_addrs[128]; // stores pointers to args in stack
+  size_t total_len = 0;
+  
+  // Parse file_name and args
+  char file_name_copy[200];
+  char* saved_ptr;
+  char* token;
+  strlcpy(file_name_copy, file_name, 200);
+  for(token = strtok_r(file_name_copy, " ", &saved_ptr);
+      token != NULL;
+      token = strtok_r(NULL, " ", &saved_ptr)) {
+    argv[argc++] = token;
+  }
+
+  // Put args into stack
+  for(i = argc - 1; i >= 0; i--) {
+    size_t arg_len = strlen(argv[i]) + 1;
+    *esp -= arg_len;
+
+    memcpy(*esp, argv[i], arg_len);
+    arg_addrs[i] = *esp;
+    total_len += arg_len;
+  }
+
+  // Word(4-byte) alignment
+  int padding = (uintptr_t)(*esp) % 4;
+  *esp -= padding;
+  memset(*esp, 0, padding);
+
+  // Push argv[argc] == NULL to stack
+  *esp -= sizeof(char *);
+  *(char **)(*esp) = NULL;
+
+  // Push argv[i] to stack;
+  for (i = argc - 1; i >= 0; i--) {
+    *esp -= sizeof(char *);
+    *(char **)(*esp) = arg_addrs[i];
+  }
+
+  // Push argv to stack
+  char** argv_start = *esp;
+  *esp -= sizeof(char **);
+  *(char ***)(*esp) = argv_start;
+
+  // Push argc to stack
+  *esp -= sizeof(int);
+  *(int *)(*esp) = argc;
+
+  // Push fake return address of main
+  *esp -= sizeof(void *);
+  *(void **)(*esp) = 0;
+
+  return true;
 }
