@@ -113,6 +113,25 @@ process_wait (tid_t child_tid UNUSED)
 {
   timer_msleep(100);
   return -1;
+  /* -- */
+  
+  struct thread *child = get_thread_by_tid(child_tid);
+    
+    /* 1. 자식이 존재하지 않거나, 이미 완전 종료되어 메모리가 해제된 경우 */
+    if (child == NULL) {
+        return -1; 
+    }
+
+    /* 2. 자식이 process_exit()에서 exit_sema를 up 할 때까지 대기 */
+    sema_down(&child->exit_sema);       
+    
+    /* 3. 부모가 깨어남 -> 자식이 기록한 종료 상태(유언장) 수령 */
+    int status = child->exit_status;    
+    
+    /* 4. 자식의 메모리 해제(thread_exit)를 허용 (Reaping) */
+    sema_up(&child->free_sema);         
+
+    return status;
 }
 
 /* Free the current process's resources. */
@@ -121,6 +140,9 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  sema_up(&cur->exit_sema);
+  sema_down(&cur->free_sema);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

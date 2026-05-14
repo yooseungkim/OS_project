@@ -143,7 +143,7 @@ void halt(void) {
 void exit(int status) {
   struct thread *curr = thread_current(); 
   printf("%s: exit(%d)\n", curr->name, status);
-  /* TODO: save status */
+  curr->exit_status = status; 
   thread_exit(); 
 }
 
@@ -184,9 +184,17 @@ int open(const char *file) {
   return ret;
 }
 
-int filesize(int fd UNUSED) {
-  /* Not implemented */
-  return -1;
+int filesize(int fd) {
+  struct thread *curr = thread_current(); 
+  struct file *file_obj = curr->fdt[fd];
+
+  if (file_obj == NULL) {
+    return -1;
+  } 
+  lock_acquire(&filesys_lock); 
+  int size = file_length(file_obj); 
+  lock_release(&filesys_lock); 
+  return size; 
 }
 
 int read(int fd, void *buffer, unsigned length) {

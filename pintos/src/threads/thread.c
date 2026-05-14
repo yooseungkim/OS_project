@@ -225,9 +225,6 @@ thread_create (const char *name, int priority,
   thread_unblock (t); /* priority 기준으로 삽입되도록 수정 */
   thread_preemption(); /* 추가된 thread의 priority가 현재 thread의 priority보다 높은 경우 전환 */
 
-  /* System Call*/
-  sema_init(&t->load_sema, 0);
-  t->load_success = false;
   return tid;
 }
 
@@ -539,6 +536,14 @@ init_thread (struct thread *t, const char *name, int priority)
 
   /* System Call */ 
   t->next_fd = 2; /* 0, 1 are reserved for stdin, stdout */
+
+  sema_init(&t->load_sema, 0);
+  t->load_success = false;
+
+  sema_init(&t->exit_sema, 0);
+  t->exit_status = 0;
+
+  sema_init(&t->free_sema, 0);
   /* - */
 }
 

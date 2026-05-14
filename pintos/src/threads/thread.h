@@ -119,8 +119,13 @@ struct thread
     int next_fd;            /* next available file descriptor */
 
     struct semaphore
-        load_sema; /* semaphore that sleeps parent until child is loaded */
-    bool load_success; 
+        load_sema; /* sleeps parent until child is loaded */
+    bool load_success;
+
+    struct semaphore exit_sema; /* parent waits for child to exit */
+    bool exit_status;           /* stores the exit code */
+
+    struct semaphore free_sema; 
     
 
 #ifdef USERPROG
@@ -202,6 +207,6 @@ void thread_mlfqs_on_tick(bool per_sec, bool per_fourth);
 /* end of Multi-Level Feedback Queue Scheduler */
 
 /* System Call */
-struct thread *get_thread_by_tid(tid_t tid); 
+struct thread *get_thread_by_tid(tid_t tid);
 
 #endif /* threads/thread.h */
