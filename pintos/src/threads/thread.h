@@ -125,7 +125,9 @@ struct thread
     struct semaphore exit_sema; /* parent waits for child to exit */
     bool exit_status;           /* stores the exit code */
 
-    struct semaphore free_sema; 
+    struct semaphore free_sema;
+
+    struct file *executable;
     
 
 #ifdef USERPROG
