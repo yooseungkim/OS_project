@@ -533,6 +533,17 @@ init_thread (struct thread *t, const char *name, int priority)
   t->wait_on_lock = NULL;
   list_init(&t->donations);
   /* donation_elem에는 명시적인 init 필요 X */
+
+  /* System Call */ 
+  t->next_fd = 2; /* 0, 1 are reserved for stdin, stdout */
+
+  sema_init(&t->load_sema, 0);
+  t->load_success = false;
+
+  sema_init(&t->exit_sema, 0);
+  t->exit_status = 0;
+
+  sema_init(&t->free_sema, 0);
   /* - */
 }
 
@@ -924,4 +935,14 @@ void thread_mlfqs_on_tick(bool per_sec, bool per_fourth) {
     list_sort(&ready_list, higher_thread_priority, NULL);
     thread_preemption();
   }
+}
+/* System Call */
+struct thread *get_thread_by_tid(tid_t tid) {
+  struct list_elem *e; 
+  /* iterate through all_list to find thread with given tid */
+  for(e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+    struct thread *t = list_entry(e, struct thread, allelem);
+    if (t->tid == tid) return t; 
+  } 
+  return NULL;
 }
