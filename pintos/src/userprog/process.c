@@ -66,6 +66,42 @@ start_process (void *file_name_)
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
+  
+  /* SYSTEM CALL HARDCODING */
+  char *esp = (char *) if_.esp;
+  
+  /* 1. "test" string */
+  esp -= 5;
+  memcpy (esp, "test", 5);
+  char *arg0_addr = esp; 
+  
+  /* 2. Word align */
+  esp = (char *)((uint32_t)esp & ~3);
+  
+  /* 3. argv[1] = NULL */
+  esp -= 4;
+  *(char **)esp = NULL;
+  
+  /* 4. argv[0] = pointer to "test" */
+  esp -= 4;
+  *(char **)esp = arg0_addr;
+  
+  char *argv_addr = esp; /* This points to argv[0] */
+  
+  /* 5. argv */
+  esp -= 4;
+  *(char ***)esp = (char **)argv_addr;
+  
+  /* 6. argc = 1 */
+  esp -= 4;
+  *(int *)esp = 1;
+  
+  /* 7. fake return address */
+  esp -= 4;
+  *(int *)esp = 0;
+  
+  if_.esp = esp;
+  /* End HARDCODING */
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
