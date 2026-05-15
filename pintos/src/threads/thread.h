@@ -5,7 +5,6 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/fixed-point.h"
-#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -31,6 +30,9 @@ typedef int tid_t;
 #define NICE_DEFAULT 0
 #define NICE_MIN -20
 #define NICE_MAX 20
+
+/* System Call */
+#define FDT_MAX 128
 
 /* A kernel thread or user process.
 
@@ -115,19 +117,14 @@ struct thread
     fixedpoint_t recent_cpu;
 
     /* System Call*/
-    struct file *fdt[128];  /* file descriptor table, max 128 files per process*/
+    struct file *fdt[FDT_MAX];  /* file descriptor table, max 128 files per process*/
     int next_fd;            /* next available file descriptor */
 
-    struct semaphore
-        load_sema; /* sleeps parent until child is loaded */
-    bool load_success;
-
-    struct semaphore exit_sema; /* parent waits for child to exit */
-    bool exit_status;           /* stores the exit code */
-
-    struct semaphore free_sema;
-
+    int exit_status;           /* stores the exit code */
     struct file *executable;
+
+    struct list children;
+    struct child_status *child_status;
     
 
 #ifdef USERPROG
@@ -207,8 +204,5 @@ void thread_preemption(void);
 /* Multi-Level Feedback Queue Scheduler */
 void thread_mlfqs_on_tick(bool per_sec, bool per_fourth);
 /* end of Multi-Level Feedback Queue Scheduler */
-
-/* System Call */
-struct thread *get_thread_by_tid(tid_t tid);
 
 #endif /* threads/thread.h */

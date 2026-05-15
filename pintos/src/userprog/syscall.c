@@ -6,6 +6,7 @@
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
 #include "userprog/process.h"
+#include "userprog/pagedir.h"
 #include "threads/synch.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
@@ -180,6 +181,9 @@ int open(const char *file) {
   if (opened_file != NULL) {
     ret = add_file_to_fdt(opened_file); 
   }
+  if (ret == -1) {
+    file_close(opened_file);
+  }
   lock_release(&filesys_lock);
   return ret;
 }
@@ -277,7 +281,8 @@ void close(int fd) {
 
 /* --- Internal Helper functions --- */
 static void validate_address(void *addr) {
-  if (addr == NULL || !is_user_vaddr(addr)) {
+  if (addr == NULL || !is_user_vaddr(addr)
+      || pagedir_get_page(thread_current()->pagedir, addr) == NULL) {
     exit(-1); 
   }
 }

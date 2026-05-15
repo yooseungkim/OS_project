@@ -17,12 +17,40 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
+#include "threads/malloc.h"
 #include "threads/palloc.h"
+#include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+
+/* Shared state between a parent process and one child process. */
+struct child_status
+  {
+    tid_t tid;
+    int exit_status;
+    bool load_success;
+    bool waited;
+
+    struct semaphore load_sema;
+    struct semaphore exit_sema;
+
+    int ref_cnt;
+    struct lock lock;
+    struct list_elem elem;
+  };
+
+struct process_start_args
+  {
+    char *file_name;
+    struct child_status *child_status;
+  };
+
+static void child_status_init (struct child_status *);
+static void child_status_release (struct child_status *);
+static struct child_status *find_child_status (tid_t);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -32,6 +60,8 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  struct child_status *cs;
+  struct process_start_args *args;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -41,6 +71,19 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  cs = malloc (sizeof *cs);
+  args = malloc (sizeof *args);
+  if (cs == NULL || args == NULL)
+    {
+      palloc_free_page (fn_copy);
+      free (cs);
+      free (args);
+      return TID_ERROR;
+    }
+  child_status_init (cs);
+  args->file_name = fn_copy;
+  args->child_status = cs;
+
   /* Project 3: parse file name */
   char file_name_copy[200];
   char* saved_ptr;
@@ -48,19 +91,23 @@ process_execute (const char *file_name)
   char* parsed_file_name = strtok_r(file_name_copy, " ", &saved_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (parsed_file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (parsed_file_name, PRI_DEFAULT, start_process, args);
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
+    free (args);
+    free (cs);
     return tid; 
   }
 
-  struct thread *child = get_thread_by_tid(tid); 
-  if (child != NULL) {
-    sema_down(&child->load_sema);
-    if (!child->load_success) {
-      return TID_ERROR; 
+  cs->tid = tid;
+  list_push_back (&thread_current ()->children, &cs->elem);
+  sema_down (&cs->load_sema);
+  if (!cs->load_success)
+    {
+      list_remove (&cs->elem);
+      child_status_release (cs);
+      return TID_ERROR;
     }
-  }
   return tid;
 }
 
@@ -69,9 +116,14 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  char *file_name = file_name_;
+  struct process_start_args *args = file_name_;
+  char *file_name = args->file_name;
+  struct child_status *cs = args->child_status;
   struct intr_frame if_;
   bool success;
+
+  thread_current ()->child_status = cs;
+  free (args);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -82,13 +134,16 @@ start_process (void *file_name_)
 
   /* load child process */
   struct thread *curr = thread_current(); 
-  curr->load_success = success; 
-  sema_up(&curr->load_sema); 
+  cs->load_success = success;
+  sema_up (&cs->load_sema);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
+  if (!success)
+    {
+      curr->exit_status = -1;
+      thread_exit ();
+    }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -105,42 +160,60 @@ start_process (void *file_name_)
    exception), returns -1.  If TID is invalid or if it was not a
    child of the calling process, or if process_wait() has already
    been successfully called for the given TID, returns -1
-   immediately, without waiting.
+   immediately, without waiting. */
 
-   This function will be implemented in problem 2-2.  For now, it
-   does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid)
 {
- 
-  struct thread *child = get_thread_by_tid(child_tid);
-    
-    /* 1. 자식이 존재하지 않거나, 이미 완전 종료되어 메모리가 해제된 경우 */
-    if (child == NULL) {
-        return -1; 
-    }
+  struct child_status *cs = find_child_status (child_tid);
+  int status;
 
-    /* 2. 자식이 process_exit()에서 exit_sema를 up 할 때까지 대기 */
-    sema_down(&child->exit_sema);       
-    
-    /* 3. 부모가 깨어남 -> 자식이 기록한 종료 상태(유언장) 수령 */
-    int status = child->exit_status;    
-    
-    /* 4. 자식의 메모리 해제(thread_exit)를 허용 (Reaping) */
-    sema_up(&child->free_sema);         
+  if (cs == NULL || cs->waited)
+    return -1;
 
-    return status;
+  cs->waited = true;
+  list_remove (&cs->elem);
+  sema_down (&cs->exit_sema);
+  status = cs->exit_status;
+  child_status_release (cs);
+  return status;
 }
 
 /* Free the current process's resources. */
 void
 process_exit (void)
 {
+  int i;
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  sema_up(&cur->exit_sema);
-  sema_down(&cur->free_sema);
+  if (cur->child_status != NULL)
+    {
+      cur->child_status->exit_status = cur->exit_status;
+      sema_up (&cur->child_status->exit_sema);
+      child_status_release (cur->child_status);
+      cur->child_status = NULL;
+    }
+
+  while (!list_empty (&cur->children))
+    {
+      struct child_status *cs = list_entry (list_pop_front (&cur->children),
+                                            struct child_status, elem);
+      child_status_release (cs);
+    }
+
+  /* Unlock executable file */
+  if (cur->executable) {
+    file_close(cur->executable);
+    cur->executable = NULL;
+  }
+
+  /* Close files in FDT */
+  for(i=0; i < FDT_MAX; i++) {
+    if(cur->fdt[i]) {
+      file_close(cur->fdt[i]);
+    }
+  }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -158,6 +231,50 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+}
+
+static void
+child_status_init (struct child_status *cs)
+{
+  cs->tid = TID_ERROR;
+  cs->exit_status = -1;
+  cs->load_success = false;
+  cs->waited = false;
+  sema_init (&cs->load_sema, 0);
+  sema_init (&cs->exit_sema, 0);
+  cs->ref_cnt = 2;
+  lock_init (&cs->lock);
+}
+
+static void
+child_status_release (struct child_status *cs)
+{
+  bool should_free;
+
+  lock_acquire (&cs->lock);
+  ASSERT (cs->ref_cnt > 0);
+  cs->ref_cnt--;
+  should_free = cs->ref_cnt == 0;
+  lock_release (&cs->lock);
+
+  if (should_free)
+    free (cs);
+}
+
+static struct child_status *
+find_child_status (tid_t child_tid)
+{
+  struct list_elem *e;
+  struct thread *cur = thread_current ();
+
+  for (e = list_begin (&cur->children); e != list_end (&cur->children);
+       e = list_next (e))
+    {
+      struct child_status *cs = list_entry (e, struct child_status, elem);
+      if (cs->tid == child_tid)
+        return cs;
+    }
+  return NULL;
 }
 
 /* Sets up the CPU for running user code in the current
@@ -293,7 +410,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
 
-  file_deny_write(file); 
+  /* Lock executable file */
+  file_deny_write(file);
   t->executable = file;
 
   /* Read program headers. */
@@ -366,8 +484,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
   success = true;
 
  done:
-  /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  if (!success) {
+    file_close(file);
+    t->executable = NULL;
+  }
   return success;
 }
 
