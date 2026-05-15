@@ -183,6 +183,7 @@ process_wait (tid_t child_tid)
 void
 process_exit (void)
 {
+  int i;
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
@@ -205,6 +206,13 @@ process_exit (void)
   if (cur->executable) {
     file_close(cur->executable);
     cur->executable = NULL;
+  }
+
+  /* Close files in FDT */
+  for(i=0; i < FDT_MAX; i++) {
+    if(cur->fdt[i]) {
+      file_close(cur->fdt[i]);
+    }
   }
 
   /* Destroy the current process's page directory and switch back

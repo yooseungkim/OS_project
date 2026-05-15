@@ -31,6 +31,9 @@ typedef int tid_t;
 #define NICE_MIN -20
 #define NICE_MAX 20
 
+/* System Call */
+#define FDT_MAX 128
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -114,7 +117,7 @@ struct thread
     fixedpoint_t recent_cpu;
 
     /* System Call*/
-    struct file *fdt[128];  /* file descriptor table, max 128 files per process*/
+    struct file *fdt[FDT_MAX];  /* file descriptor table, max 128 files per process*/
     int next_fd;            /* next available file descriptor */
 
     int exit_status;           /* stores the exit code */

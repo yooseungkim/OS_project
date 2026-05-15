@@ -181,6 +181,9 @@ int open(const char *file) {
   if (opened_file != NULL) {
     ret = add_file_to_fdt(opened_file); 
   }
+  if (ret == -1) {
+    file_close(opened_file);
+  }
   lock_release(&filesys_lock);
   return ret;
 }
