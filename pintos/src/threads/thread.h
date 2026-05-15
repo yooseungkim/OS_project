@@ -5,7 +5,6 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/fixed-point.h"
-#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -118,16 +117,11 @@ struct thread
     struct file *fdt[128];  /* file descriptor table, max 128 files per process*/
     int next_fd;            /* next available file descriptor */
 
-    struct semaphore
-        load_sema; /* sleeps parent until child is loaded */
-    bool load_success;
-
-    struct semaphore exit_sema; /* parent waits for child to exit */
-    bool exit_status;           /* stores the exit code */
-
-    struct semaphore free_sema;
-
+    int exit_status;           /* stores the exit code */
     struct file *executable;
+
+    struct list children;
+    struct child_status *child_status;
     
 
 #ifdef USERPROG
@@ -207,8 +201,5 @@ void thread_preemption(void);
 /* Multi-Level Feedback Queue Scheduler */
 void thread_mlfqs_on_tick(bool per_sec, bool per_fourth);
 /* end of Multi-Level Feedback Queue Scheduler */
-
-/* System Call */
-struct thread *get_thread_by_tid(tid_t tid);
 
 #endif /* threads/thread.h */
