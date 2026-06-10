@@ -3,6 +3,7 @@
 
 #include <debug.h>
 #include <list.h>
+#include <hash.h>
 #include <stdint.h>
 #include "threads/fixed-point.h"
 
@@ -125,6 +126,14 @@ struct thread
 
     struct list children;
     struct child_status *child_status;
+
+#ifdef VM
+    struct hash spt;
+    struct list mmap_list;
+    int next_mapid;
+    void *user_esp;
+    bool vm_initialized;
+#endif
     
 
 #ifdef USERPROG

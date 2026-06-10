@@ -22,9 +22,13 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#ifdef VM
+#include "vm/page.h"
+#endif
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+extern struct lock filesys_lock;
 
 /* Shared state between a parent process and one child process. */
 struct child_status
@@ -202,18 +206,26 @@ process_exit (void)
       child_status_release (cs);
     }
 
+#ifdef VM
+  vm_process_cleanup ();
+#endif
+
   /* Unlock executable file */
   if (cur->executable) {
+    lock_acquire (&filesys_lock);
     file_close(cur->executable);
+    lock_release (&filesys_lock);
     cur->executable = NULL;
   }
 
   /* Close files in FDT */
+  lock_acquire (&filesys_lock);
   for(i=0; i < FDT_MAX; i++) {
     if(cur->fdt[i]) {
       file_close(cur->fdt[i]);
     }
   }
+  lock_release (&filesys_lock);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -375,6 +387,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   struct file *file = NULL;
   off_t file_ofs;
   bool success = false;
+  bool filesys_locked = false;
   int i;
 
   /* Allocate and activate page directory. */
@@ -382,6 +395,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
+#ifdef VM
+  if (!vm_process_init ())
+    goto done;
+#endif
 
   /* Project 3: parse file name */
   char file_name_copy[200];
@@ -390,6 +407,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   char* parsed_file_name = strtok_r(file_name_copy, " ", &saved_ptr);
 
   /* Open executable file. */
+  lock_acquire (&filesys_lock);
+  filesys_locked = true;
   file = filesys_open (parsed_file_name);
   if (file == NULL) 
     {
@@ -473,6 +492,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
         }
     }
 
+  lock_release (&filesys_lock);
+  filesys_locked = false;
+
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
@@ -484,16 +506,25 @@ load (const char *file_name, void (**eip) (void), void **esp)
   success = true;
 
  done:
-  if (!success) {
+  if (!success && file != NULL) {
+    if (!filesys_locked)
+      {
+        lock_acquire (&filesys_lock);
+        filesys_locked = true;
+      }
     file_close(file);
     t->executable = NULL;
   }
+  if (filesys_locked)
+    lock_release (&filesys_lock);
   return success;
 }
 
 /* load() helpers. */
 
+#ifndef VM
 static bool install_page (void *upage, void *kpage, bool writable);
+#endif
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -562,7 +593,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
+#ifndef VM
   file_seek (file, ofs);
+#endif
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -571,6 +604,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
+#ifdef VM
+      if (!vm_add_file_page (file, ofs, upage, page_read_bytes,
+                             page_zero_bytes, writable))
+        return false;
+#else
       /* Get a page of memory. */
       uint8_t *kpage = palloc_get_page (PAL_USER);
       if (kpage == NULL)
@@ -590,11 +628,13 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
           palloc_free_page (kpage);
           return false; 
         }
+#endif
 
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+      ofs += PGSIZE;
     }
   return true;
 }
@@ -604,6 +644,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp) 
 {
+#ifdef VM
+  void *upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
+
+  if (!vm_add_stack_page (upage, true))
+    return false;
+  *esp = PHYS_BASE;
+  return true;
+#else
   uint8_t *kpage;
   bool success = false;
 
@@ -617,8 +665,10 @@ setup_stack (void **esp)
         palloc_free_page (kpage);
     }
   return success;
+#endif
 }
 
+#ifndef VM
 /* Adds a mapping from user virtual address UPAGE to kernel
    virtual address KPAGE to the page table.
    If WRITABLE is true, the user process may modify the page;
@@ -638,6 +688,7 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+#endif
 
 static bool
 construct_stack(const char* file_name, void** esp) {
